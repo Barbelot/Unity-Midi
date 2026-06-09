@@ -55,7 +55,14 @@ namespace Midi
                     switch ((MidiRawData.MidiEventType)midiEvent.Type)
                     {
                         case MidiRawData.MidiEventType.NoteOff: // block end
-                            var noteOnEvent = map[note];
+                            // Stray/duplicate note-off with no matching open note-on: skip it
+                            // rather than aborting the whole import (some MIDI files contain these).
+                            if (!map.TryGetValue(note, out var noteOnEvent))
+                            {
+                                Debug.LogWarning($"[MIDI] NoteOff for note {note} with no matching NoteOn — skipping stray event.");
+                                break;
+                            }
+
                             // create new block
                             var block = new MidiData.MidiBlock
                             {
@@ -64,28 +71,21 @@ namespace Midi
                                 Note = note,
                                 Velocity = noteOnEvent.Velocity
                             };
-                            
+
                             tracks[track.Index].AddBlock(block);
 
-                            if (map.TryGetValue(note, out var existingNote))
+                            if (noteOnEvent.Count == 1)
                             {
-                                if (existingNote.Count == 1)
-                                {
-                                    map.Remove(note);
-                                }
-                                else
-                                {
-                                    map[note] = new NoteOnEvent
-                                    {
-                                        Count = existingNote.Count - 1,
-                                        Velocity = existingNote.Velocity,
-                                        StartTimeMs = existingNote.StartTimeMs
-                                    };
-                                }
+                                map.Remove(note);
                             }
                             else
                             {
-                                throw new Exception($"note off event - could not find matching on event");
+                                map[note] = new NoteOnEvent
+                                {
+                                    Count = noteOnEvent.Count - 1,
+                                    Velocity = noteOnEvent.Velocity,
+                                    StartTimeMs = noteOnEvent.StartTimeMs
+                                };
                             }
 
                             allBlocks.Add(block);
