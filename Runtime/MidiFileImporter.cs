@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Midi
 {
-    [ScriptedImporter(1, "mid")]
+    [ScriptedImporter(2, "mid")]
     public class MidiFileImporter : ScriptedImporter
     {
         public MidiImportSettings ImportSettings = new MidiImportSettings();

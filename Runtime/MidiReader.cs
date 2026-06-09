@@ -65,12 +65,16 @@ namespace Midi
             ref int position,
             byte metaEventType,
             ref byte data1,
-            ref byte data2)
+            ref byte data2,
+            ref int extraData)
         {
             switch (metaEventType)
             {
                 case (byte)MidiRawData.MetaEventType.Tempo:
                     var mspqn = (data[position + 1] << 16) | (data[position + 2] << 8) | data[position + 3];
+                    // Preserve the real microseconds-per-quarter; the truncated byte BPM below
+                    // overflows past 255 BPM and loses fractional tempos. The tempo map uses extraData.
+                    extraData = mspqn;
                     data1 = (byte)(60000000.0 / mspqn);
                     position += 4;
                     return true;
@@ -162,9 +166,10 @@ namespace Midi
                         {
                             var data1 = (byte)0;
                             var data2 = (byte)0;
+                            var extraData = 0;
 
                             // We only handle the few meta events we care about and skip the rest
-                            if (ParseMetaEvent(data, ref position, metaEventType, ref data1, ref data2))
+                            if (ParseMetaEvent(data, ref position, metaEventType, ref data1, ref data2, ref extraData))
                             {
                                 track.MidiEvents.Add(
                                     new MidiRawData.MidiEvent
@@ -173,7 +178,8 @@ namespace Midi
                                             Type = status,
                                             Arg1 = metaEventType,
                                             Arg2 = data1,
-                                            Arg3 = data2
+                                            Arg3 = data2,
+                                            ExtraData = extraData
                                         });
                             }
                         }

@@ -38,18 +38,40 @@ namespace Midi
                 _noteTimeMap.Add(new Dictionary<byte, NoteOnEvent>());
             }
 
+            // Build a tempo map up-front so every tick is converted with the tempo actually in
+            // effect at that point. A single global BPM shifts every note in files that contain
+            // tempo changes (e.g. a fast count-in measure followed by the song tempo).
+            var tempoChanges = new List<MidiTempoMap.TempoChange>();
             if (midiImportSettings.OverrideBpm)
             {
-                Bpm = midiImportSettings.Bpm;
+                var microsecondsPerQuarter = 60000000 / Mathf.Max(1, (int)midiImportSettings.Bpm);
+                tempoChanges.Add(new MidiTempoMap.TempoChange(0, microsecondsPerQuarter));
             }
+            else
+            {
+                foreach (var track in midiFile.Tracks)
+                {
+                    foreach (var midiEvent in track.MidiEvents)
+                    {
+                        if (midiEvent.MidiEventType == MidiRawData.MidiEventType.MetaEvent
+                            && midiEvent.MetaEventType == MidiRawData.MetaEventType.Tempo)
+                        {
+                            tempoChanges.Add(new MidiTempoMap.TempoChange(midiEvent.Time, midiEvent.MicrosecondsPerQuarter));
+                        }
+                    }
+                }
+            }
+
+            var tempoMap = new MidiTempoMap(midiFile.TicksPerQuarterNote, tempoChanges);
+            Bpm = GetRepresentativeBpm(tempoChanges);
 
             foreach (var track in midiFile.Tracks)
             {
                 var map = _noteTimeMap[track.Index];
-                
+
                 foreach (var midiEvent in track.MidiEvents)
                 {
-                    var timsMs = MidiUtilities.MidiTimeToMs(Bpm, midiFile.TicksPerQuarterNote, midiEvent.Time);
+                    var timeMs = tempoMap.TickToMs(midiEvent.Time);
                     var note = midiEvent.Arg2;
                     
                     switch ((MidiRawData.MidiEventType)midiEvent.Type)
@@ -67,7 +89,7 @@ namespace Midi
                             var block = new MidiData.MidiBlock
                             {
                                 StartTimeMs = noteOnEvent.StartTimeMs,
-                                EndTimeMs = timsMs,
+                                EndTimeMs = timeMs,
                                 Note = note,
                                 Velocity = noteOnEvent.Velocity
                             };
@@ -95,7 +117,7 @@ namespace Midi
                             {
                                 map[note] = new NoteOnEvent
                                 {
-                                    StartTimeMs = timsMs,
+                                    StartTimeMs = timeMs,
                                     Velocity = midiEvent.Arg3,
                                     Count = existingNoteOnEvent.Count + 1
                                 };
@@ -104,7 +126,7 @@ namespace Midi
                             {
                                 map.Add(note, new NoteOnEvent
                                 {
-                                    StartTimeMs = timsMs,
+                                    StartTimeMs = timeMs,
                                     Velocity = midiEvent.Arg3,
                                     Count = 1
                                 });
@@ -125,13 +147,8 @@ namespace Midi
                             switch (midiEvent.MetaEventType)
                             {
                                 case MidiRawData.MetaEventType.Tempo:
-                                    // only set the bpm if override bpm is off
-                                    if (!midiImportSettings.OverrideBpm)
-                                    {
-                                        // set new bpm
-                                        Bpm = (byte) midiEvent.Note;
-                                    }
-                                    
+                                    // Tempo is resolved through the tempo map built before this loop;
+                                    // nothing to do per-event here.
                                     break;
                                 case MidiRawData.MetaEventType.TimeSignature:
                                     break;
@@ -172,6 +189,45 @@ namespace Midi
                     }
                 }
             }
+        }
+
+        // Representative BPM for display/back-compat (MidiData.Bpm). Uses the most frequently
+        // occurring tempo so one-off spikes (such as a fast count-in measure) don't skew it.
+        private static byte GetRepresentativeBpm(List<MidiTempoMap.TempoChange> tempoChanges)
+        {
+            if (tempoChanges.Count == 0)
+            {
+                return 120;
+            }
+
+            var counts = new Dictionary<int, int>();
+            var bestMicrosecondsPerQuarter = 0;
+            var bestCount = 0;
+            foreach (var change in tempoChanges)
+            {
+                if (change.MicrosecondsPerQuarter <= 0)
+                {
+                    continue;
+                }
+
+                counts.TryGetValue(change.MicrosecondsPerQuarter, out var count);
+                count++;
+                counts[change.MicrosecondsPerQuarter] = count;
+
+                if (count > bestCount)
+                {
+                    bestCount = count;
+                    bestMicrosecondsPerQuarter = change.MicrosecondsPerQuarter;
+                }
+            }
+
+            if (bestMicrosecondsPerQuarter <= 0)
+            {
+                return 120;
+            }
+
+            var bpm = Mathf.RoundToInt(60000000f / bestMicrosecondsPerQuarter);
+            return (byte)Mathf.Clamp(bpm, 0, 255);
         }
     }
 }

@@ -37,9 +37,15 @@ namespace Midi
 
             public byte Arg3;
 
+            // Holds values that don't fit in the byte args. For Tempo meta events this is
+            // the raw microseconds-per-quarter-note (a 24-bit value), which the tempo map needs.
+            public int ExtraData;
+
             public MidiEventType MidiEventType => (MidiEventType)Type;
 
             public MetaEventType MetaEventType => (MetaEventType)Arg1;
+
+            public int MicrosecondsPerQuarter => ExtraData;
 
             public int Channel => Arg1;
 
