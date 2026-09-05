@@ -1,4 +1,6 @@
-﻿using UnityEditor.AssetImporters;
+﻿#if UNITY_EDITOR
+
+using UnityEditor.AssetImporters;
 using UnityEngine;
 
 namespace Midi
@@ -16,3 +18,5 @@ namespace Midi
         }
     }
 }
+
+#endif

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using NaughtyAttributes;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
@@ -59,7 +60,7 @@ namespace Midi
             }
         }
 
-        private void FireNoteOn(byte note)
+        public void FireNoteOn(byte note)
         {
             var msg = new MidiReceiver.MidiMessage
             {
@@ -71,7 +72,7 @@ namespace Midi
             OnNoteOn?.Invoke(msg);
         }
 
-        private void FireNoteOff(byte note)
+        public void FireNoteOff(byte note)
         {
             var msg = new MidiReceiver.MidiMessage
             {
@@ -81,6 +82,20 @@ namespace Midi
                 Data2   = 0,
             };
             OnNoteOff?.Invoke(msg);
+        }
+
+        [Button]
+        public void FireAllNoteOn()
+        {
+            foreach (var binding in keyBindings)
+                FireNoteOn(binding.noteNumber);
+        }
+
+        [Button]
+        public void FireRandomNoteOn()
+        {
+            if (keyBindings.Count == 0) return;
+            FireNoteOn(keyBindings[UnityEngine.Random.Range(0, keyBindings.Count)].noteNumber);
         }
     }
 }
